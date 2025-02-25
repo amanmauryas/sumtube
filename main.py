@@ -1,16 +1,14 @@
 import google.generativeai as genai
 import os
-from fastapi import FastAPI
-from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
 
 # Load API keys from .env
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # Use Gemini API key
 
-# Initialize FastAPI
-app = FastAPI()
+app = Flask(__name__)
 
 # Function to extract video ID from URL
 def get_video_id(url):
@@ -20,47 +18,40 @@ def get_video_id(url):
         return url.split("youtu.be/")[-1].split("?")[0]
     return None
 
-# Define request model
-class VideoRequest(BaseModel):
-    video_url: str
-    language: str = "en"  # Default to English
+# Generate summary using Google Gemini API
+def generate_summary(text):
+    model = genai.GenerativeModel("gemini-pro")
+    response = model.generate_content(f"Summarize the following text in bullet points:\n{text}")
+    return response.text
 
-# Step 1: API Endpoint for YouTube Processing
-@app.post("/process_video")
-def process_video(data: VideoRequest):
-    video_id = get_video_id(data.video_url)
-    
+# Flask API to summarize YouTube video
+@app.route("/summarize", methods=["GET"])
+def summarize():
+    video_url = request.args.get("url")
+    language = request.args.get("lang", "en")  # Default language is English
+
+    if not video_url:
+        return jsonify({"error": "Missing YouTube video URL"}), 400
+
+    video_id = get_video_id(video_url)
     if not video_id:
-        return {"error": "Invalid YouTube URL!"}
+        return jsonify({"error": "Invalid YouTube URL"}), 400
 
-    # Step 2: Fetch transcript
+    # Fetch transcript
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[data.language])
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[language])
         text = " ".join([t['text'] for t in transcript])
     except:
-        return {"error": "No subtitles available for this video!"}
+        return jsonify({"error": "No subtitles available for this video"}), 404
 
-    # Step 3: Generate Summary using Google Gemini API
-    def generate_summary(text):
-        model = genai.GenerativeModel("gemini-pro")
-        response = model.generate_content(f"Summarize the following text in bullet points:\n{text}")
-        return response.text
-
+    # Generate Summary
     summary = generate_summary(text)
 
-    # Step 4: Save summary and transcript to a text file
-    output_file = "summary_output.txt"
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write("🔹 Summary:\n" + summary + "\n\n")
-        f.write("🔹 Full Transcript:\n" + text)
-
-    return {
-        "message": "✅ Summary and transcript saved!",
+    return jsonify({
         "summary": summary,
-        "output_file": output_file
-    }
+        "transcript": text
+    })
 
-# Run the API (Render needs dynamic port)
+# Run Flask app locally
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    app.run(host="0.0.0.0", port=5000, debug=True)
