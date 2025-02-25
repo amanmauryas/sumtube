@@ -7,6 +7,7 @@ youtube-transcript-api
 googletrans==4.0.0-rc1
 pytube
 python-dotenv
-flask  # Add if you're using Flask for the backend
-fastapi  # Add if you're using FastAPI for the backend
-gunicorn  # Required for deployment (if using Flask/FastAPI)
+fastapi  # Use if your backend is in FastAPI
+flask  # Use if your backend is in Flask
+gunicorn  # Required for deployment
+uvicorn  # Required for running FastAPI with ASGI
